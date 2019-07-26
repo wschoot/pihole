@@ -23,4 +23,6 @@ sudo bash basic-install.sh --unattended
 ```
 ## Troubleshooting
 
-Right now, the installation of Pi-hole gives an error during installation, and I've created issue 2860 (https://github.com/pi-hole/pi-hole/issues/2860) for this. This is why I chose manual installation of Pi-hole for now, instead of installing it using Ansible.
+Right now, the installation of Pi-hole gives an error during installation, and I've created issue 2860 (https://github.com/pi-hole/pi-hole/issues/2860) for this.
+
+This can be circumvented by adding the line BLOCKING_ENABLED to setupVars.conf.j2. Set it to either false, true, or whatever, and you'll be fine.
