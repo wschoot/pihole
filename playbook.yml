@@ -1,0 +1,73 @@
+---
+- hosts: all
+  become: true
+  vars:
+    motd: |
+      curl -sSL https://install.pi-hole.net | bash
+      OR
+      sudo bash basic-install.sh --unattended
+      http://{{ ansible_eth1.ipv4.address }}/admin
+
+  tasks:
+    - name: Install epel & remi
+      package:
+        name:
+          - epel-release
+          - "https://rpms.remirepo.net/enterprise/remi-release-{{ ansible_facts['distribution_major_version'] }}.rpm"
+
+    - name: deps
+      package:
+        name:
+          - bind-utils
+          - cronie
+          - curl
+          - dialog
+          - findutils
+          - git
+          - iproute
+          - libcap
+          - newt
+          - nmap-ncat
+          - php-cli
+          - php-cli
+          - php-common
+          - libidn2
+          - lighttpd
+          - lighttpd-fastcgi
+          - php-pdo
+          - procps-ng
+          - psmisc
+          - sqlite
+          - sudo
+          - unzip
+          - wget
+          - which
+          - yum-utils
+        state: installed
+
+    - name: Put SELinux in permissive mode
+      selinux:
+        policy: targeted
+        state: permissive
+
+    - name: create pihole directory
+      file:
+        path: /etc/pihole
+        state: directory
+
+    - name: Update pihole configuration
+      template:
+        src: setupVars.conf.j2
+        dest: /etc/pihole/setupVars.conf
+
+    - name: Copy using inline content
+      copy:
+        content: "{{ motd }}"
+        dest: /etc/motd
+
+    - name: download install script
+      get_url:
+        url: https://install.pi-hole.net
+        dest: /home/vagrant/basic-install.sh
+        mode: u+rwx
+        owner: vagrant

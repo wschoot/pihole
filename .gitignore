@@ -1,0 +1,6 @@
+ansible-vault-password.yml
+.vagrant
+.*.swp
+*.retry
+log
+rebuild
