@@ -71,3 +71,9 @@
         dest: /home/vagrant/basic-install.sh
         mode: u+rwx
         owner: vagrant
+
+    - name: run install script
+      command: bash basic-install.sh --unattended
+      args:
+        creates: /usr/local/bin/pihole
+
