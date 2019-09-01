@@ -9,7 +9,7 @@ Vagrant.configure("2") do |config|
     end
 
     # Uitgaande iface van je host
-    config.vm.network "public_network", bridge: "eno1", dev: "eno1"
+    config.vm.network "public_network", bridge: "eno1", dev: "eno1", ip: "192.168.88.200"
 
     config.vm.define "pihole" do |node|
         config.vm.hostname = "pihole.local"
