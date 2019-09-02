@@ -69,6 +69,7 @@
           INSTALL_WEB_SERVER=true
           INSTALL_WEB_INTERFACE=true
           LIGHTTPD_ENABLED=true
+          DNSMASQ_LISTENING=local
           PIHOLE_DNS_1=8.8.8.8
           PIHOLE_DNS_2=8.8.4.4
 
@@ -84,10 +85,12 @@
         mode: u+rwx
         owner: vagrant
 
-    #- name: run install script
-      #command: bash basic-install.sh --unattended
-      #args#:
-        #creates: /usr/local/bin/pihole
+    - name: run install script
+      command: bash basic-install.sh --unattended
+      environment:
+        PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+      args:
+        creates: /usr/local/bin/pihole
 
     - name: Wireguard dependencies
       package:
@@ -137,24 +140,6 @@
         - net.ipv6.conf.all.forwarding
 
     - name: Create keypairs
-      shell: umask 077 && wg genkey | tee wg-op7-private.key | wg pubkey > wg-op7-public.key
-      args:
-        chdir: /etc/wireguard
-        creates:
-          - /etc/wireguard/wg-op7-private.key
-          - /etc/wireguard/wg-op7-public.key
-
-    - name: cat privkey op7
-      command: cat /etc/wireguard/wg-op7-private.key
-      register: op7privkey
-      tags: genconfig
-
-    - name: cat pubkey op7
-      command: cat /etc/wireguard/wg-op7-public.key
-      register: op7pubkey
-      tags: genconfig
-
-    - name: Create keypairs
       shell: umask 077 && wg genkey | tee wg-private.key | wg pubkey > wg-public.key
       args:
         chdir: /etc/wireguard
@@ -165,12 +150,10 @@
     - name: cat privkey
       command: cat /etc/wireguard/wg-private.key
       register: serverprivkey
-      tags: genconfig
 
     - name: cat pubkey
       command: cat /etc/wireguard/wg-public.key
       register: serverpubkey
-      tags: genconfig
 
     - name: Build rest of config
       copy:
@@ -184,28 +167,6 @@
           Address = 10.0.88.1/24
           PreUp = ip r add default via 192.168.88.1 dev eth1; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.0.88.0/24 -o eth1 -j MASQUERADE
           PostDown = ip r del default via 192.168.88.1 dev eth1; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.0.88.0/24 -o eth1 -j MASQUERADE
-
-          [Peer]
-          PublicKey = {{ op7pubkey.stdout }}
-          AllowedIPs = 10.0.88.2/32
-      tags: genconfig
-
-    - name: Build client config
-      copy:
-        dest: /etc/wireguard/client.conf
-        mode: 0600
-        content: |
-          [Interface]
-          PrivateKey = {{ op7privkey.stdout }}
-          Address = 10.0.88.2/24
-          DNS = 10.0.88.1,8.8.8.8
-
-          [Peer]
-          Endpoint = huis.schoot.org:53
-          PublicKey = {{ serverpubkey.stdout }}
-          AllowedIPs = 0.0.0.0/0, ::/0
-          PersistentKeepalive = 25
-      tags: genconfig
 
     - name: enable start
       systemd:
