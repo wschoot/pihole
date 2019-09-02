@@ -1,0 +1,88 @@
+---
+- hosts: all
+  become: true
+  vars:
+    interface: wg0
+  vars_prompt:
+    - name: vpnuser
+      prompt: "VPN user?"
+      private: no
+
+    - name: number #FIXME autodetect
+      prompt: "Number?"
+      private: no
+
+  tasks:
+    - name: bestaat de workdir al?
+      stat:
+        path: /etc/wireguard/{{ vpnuser }}
+      register: workdir
+
+    - name: generate workdir
+      file:
+        state: directory
+        path: /etc/wireguard/{{ vpnuser }}
+      failed_when: workdir.stat.isdir is defined
+
+    - name: generate private and public key
+      shell: umask 077 && wg genkey | tee private.key | wg pubkey > public.key
+      args:
+        creates:
+          - /etc/wireguard/{{ vpnuser }}/private.key
+          - /etc/wireguard/{{ vpnuser }}/public.key
+        chdir: /etc/wireguard/{{ vpnuser }}
+
+    - name: get privatekey in var
+      command: cat /etc/wireguard/{{ vpnuser }}/private.key
+      register: privatekey
+
+    - name: get serverpubkey in var
+      command: cat /etc/wireguard/wg-public.key
+      register: serverpubkey
+
+    - name: get pubkey in var
+      command: cat /etc/wireguard/{{ vpnuser }}/public.key
+      register: pubkey
+
+    - name: generate client config
+      copy:
+        dest: /etc/wireguard/{{ vpnuser }}/config
+        content: |
+          [Interface]
+          PrivateKey = {{ privatekey.stdout }}
+          Address = 10.0.88.{{ number }}/24
+          DNS = 10.0.88.1,8.8.8.8
+
+          [Peer]
+          Endpoint = huis.schoot.org:53
+          PersistentKeepalive = 25
+          PublicKey = {{ serverpubkey.stdout }}
+          AllowedIPs = 0.0.0.0/0
+
+    - name: add config to running {{ interface }}
+      command: >
+        wg set {{ interface }}
+        peer {{ pubkey.stdout }}
+        allowed-ips 10.0.88.{{ number }}/32
+
+    - name: save config
+      command: wg showconf {{ interface }}
+      register: conf
+
+    - name: write conf
+      copy:
+        content: |
+          {{ conf.stdout }}
+        dest: /etc/wireguard/{{ interface }}.conf
+        mode: 0600
+
+    - name: show qrcode
+      shell: qrencode -t ansiutf8 < /etc/wireguard/{{ vpnuser }}/config > /etc/wireguard/{{ vpnuser }}/qr
+
+    - name: save qr
+      command: cat /etc/wireguard/{{ vpnuser }}/qr
+      register: qrcode
+
+    - name: dump qr
+      debug:
+        var: qrcode.stdout_lines
