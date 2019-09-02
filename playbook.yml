@@ -2,11 +2,12 @@
 - hosts: all
   become: true
   vars:
+    interface: eth0
     motd: |
       curl -sSL https://install.pi-hole.net | bash
       OR
       sudo bash basic-install.sh --unattended
-      http://{{ ansible_eth1.ipv4.address }}/admin
+      http://{{ hostvars[inventory_hostname]['ansible_%s'| format(interface)].ipv4.address }}/admin
       sudo qrencode -t ansiutf8 < /etc/wireguard/client.conf
 
   tasks:
@@ -15,6 +16,7 @@
         name:
           - epel-release
           - "https://rpms.remirepo.net/enterprise/remi-release-{{ ansible_facts['distribution_major_version'] }}.rpm"
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
 
     - name: deps
       package:
@@ -29,7 +31,6 @@
           - libcap
           - newt
           - nmap-ncat
-          - php-cli
           - php-cli
           - php-common
           - libidn2
@@ -46,11 +47,40 @@
           - which
           - yum-utils
         state: installed
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+
+    - name: apt ppa installeren
+      apt_repository:
+        repo: ppa:wireguard/wireguard
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: debian keyring
+      package:
+        name:
+          - debian-archive-keyring
+          - debian-keyring
+      when: ansible_distribution == 'Debian'
+
+    - name: Add an apt key by id from a keyserver
+      apt_key:
+        keyserver: keyserver.ubuntu.com
+        id: "{{ item }}"
+      loop:
+          - 04EE7237B7D453EC
+          - 648ACFD622F3D138
+      when: ansible_distribution == 'Debian'
+
+    - name: apt sources
+      apt_repository:
+        repo: "deb http://deb.debian.org/debian/ unstable main"
+        state: present
+      when: ansible_distribution == 'Debian'
 
     - name: Put SELinux in permissive mode
       selinux:
         policy: targeted
         state: permissive
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
 
     - name: create pihole directory
       file:
@@ -62,8 +92,8 @@
         dest: /etc/pihole/setupVars.conf
         content: |
           WEBPASSWORD=
-          PIHOLE_INTERFACE=eth1
-          IPV4_ADDRESS={{ ansible_eth1.ipv4.address }}/{{ ansible_eth1.ipv4.netmask }}
+          PIHOLE_INTERFACE={{ interface }}
+          IPV4_ADDRESS={{ hostvars[inventory_hostname]['ansible_%s'| format(interface)].ipv4.address }}/{{ hostvars[inventory_hostname]['ansible_%s' | format(interface)].ipv4.address }}
           IPV6_ADDRESS=
           QUERY_LOGGING=true
           INSTALL_WEB_SERVER=true
@@ -78,28 +108,37 @@
         content: "{{ motd }}"
         dest: /etc/motd
 
+
+      # TODO ALles per OS in een block ipv losse WHEN statements
+      # user PI disablen (securen) na rpi installer
+
+    - name: Update all packages on a Debian/Ubuntu
+      apt:
+        update_cache: yes
+        upgrade: dist
+      when: ansible_distribution == 'Debian'
+
     - name: download install script
       get_url:
         url: https://install.pi-hole.net
-        dest: /home/vagrant/basic-install.sh
+        dest: /tmp/basic-install.sh
         mode: u+rwx
-        owner: vagrant
 
     - name: run install script
-      command: bash basic-install.sh --unattended
+      command: bash /tmp/basic-install.sh --unattended
       environment:
         PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
       args:
         creates: /usr/local/bin/pihole
 
-    - name: Wireguard dependencies
+    - name: Nieuwe kernel
       package:
         name:
           - kernel-devel
           - kernel-headers
           - kernel
-          - qrencode
         state: latest
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
 
     - name: reboot for new kernel
       reboot:
@@ -113,14 +152,15 @@
         enabled: yes
         gpgkey: https://copr-be.cloud.fedoraproject.org/results/jdoss/wireguard/pubkey.gpg
         gpgcheck: true
+      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
 
-    - name: Wireguard dependencies
+    - name: Wireguard + dependencies
       package:
         name:
           - wireguard-dkms
           - wireguard-tools
+          - qrencode
         state: latest
-
 
     - name: Create config dir
       file:
@@ -165,11 +205,13 @@
           ListenPort = 51280
           SaveConfig = false
           Address = 10.0.88.1/24
-          PreUp = ip r add default via 192.168.88.1 dev eth1; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.0.88.0/24 -o eth1 -j MASQUERADE
-          PostDown = ip r del default via 192.168.88.1 dev eth1; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.0.88.0/24 -o eth1 -j MASQUERADE
+          PreUp = ip r add default via 192.168.88.1 dev {{ interface }}; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.0.88.0/24 -o {{ interface }} -j MASQUERADE
+          PostDown = ip r del default via 192.168.88.1 dev {{ interface }}; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.0.88.0/24 -o {{ interface }} -j MASQUERADE
 
     - name: enable start
       systemd:
         state: started
         service: wg-quick@wg0
         enabled: true
+
+# FIXME default route deleten is vast niet zo'n goed idee
