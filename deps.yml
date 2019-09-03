@@ -1,0 +1,56 @@
+- name: CentOS deps
+  block:
+  - name: deps
+    package:
+      name:
+        - bind-utils
+        - cronie
+        - curl
+        - dialog
+        - findutils
+        - git
+        - iproute
+        - libcap
+        - newt
+        - nmap-ncat
+        - php-cli
+        - php-common
+        - libidn2
+        - lighttpd
+        - lighttpd-fastcgi
+        - php-pdo
+        - procps-ng
+        - psmisc
+        - sqlite
+        - sudo
+        - tcpdump
+        - unzip
+        - wget
+        - which
+        - yum-utils
+      state: installed
+  - name: Nieuwe kernel
+    package:
+      name:
+        - kernel-devel
+        - kernel-headers
+        - kernel
+      state: latest
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+
+- name: Update all packages on a Debian/Ubuntu
+  apt:
+    update_cache: yes
+    upgrade: dist
+    autoremove: yes
+  when: ansible_distribution == 'Debian'
+
+- name: fail
+  command: update-grub2
+- name: fail
+  command: grub-install /dev/sda
+- name: reboot for new kernel
+  reboot:
+  # when if [ "$(sudo grubby --default-kernel | sed 's/^[^-]*-//')" != "$(uname -r)" ] ; then echo anders; else echo same; fi
+
+

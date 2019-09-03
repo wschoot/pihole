@@ -1,0 +1,33 @@
+- name: Install epel & remi
+  package:
+    name:
+      - epel-release
+      - "https://rpms.remirepo.net/enterprise/remi-release-{{ ansible_facts['distribution_major_version'] }}.rpm"
+  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+
+- name: apt ppa installeren
+  apt_repository:
+    repo: ppa:wireguard/wireguard
+  when: ansible_distribution == 'Ubuntu'
+
+- name: Debian
+  block:
+  - name: debian keyring
+    package:
+      name:
+        - debian-archive-keyring
+        - debian-keyring
+
+  - name: Add an apt key by id from a keyserver
+    apt_key:
+      keyserver: keyserver.ubuntu.com
+      id: "{{ item }}"
+    loop:
+        - 04EE7237B7D453EC
+        - 648ACFD622F3D138
+
+  - name: apt sources
+    apt_repository:
+      repo: "deb http://deb.debian.org/debian/ unstable main"
+      state: present
+  when: ansible_distribution == 'Debian'

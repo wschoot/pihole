@@ -2,7 +2,7 @@
 
 Vagrant.configure("2") do |config|
 
-    config.vm.box = "generic/debian10"
+    config.vm.box = "roboxes/debian10"
     #config.vm.box = "centos/7"
     config.vm.provider :libvirt do |vb|
         vb.memory = 4096
@@ -10,7 +10,7 @@ Vagrant.configure("2") do |config|
     end
 
     # Uitgaande iface van je host
-    config.vm.network "public_network", bridge: "eno1", dev: "eno1", ip: "192.168.88.200"
+    config.vm.network :private_network, ip: "10.0.15.30"
 
     config.vm.define "pihole" do |node|
         config.vm.hostname = "pihole.local"

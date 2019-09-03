@@ -11,207 +11,33 @@
       sudo qrencode -t ansiutf8 < /etc/wireguard/client.conf
 
   tasks:
-    - name: Install epel & remi
-      package:
-        name:
-          - epel-release
-          - "https://rpms.remirepo.net/enterprise/remi-release-{{ ansible_facts['distribution_major_version'] }}.rpm"
-      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+    - name: Install repos
+      include: 'repo.yml'
 
-    - name: deps
-      package:
-        name:
-          - bind-utils
-          - cronie
-          - curl
-          - dialog
-          - findutils
-          - git
-          - iproute
-          - libcap
-          - newt
-          - nmap-ncat
-          - php-cli
-          - php-common
-          - libidn2
-          - lighttpd
-          - lighttpd-fastcgi
-          - php-pdo
-          - procps-ng
-          - psmisc
-          - sqlite
-          - sudo
-          - tcpdump
-          - unzip
-          - wget
-          - which
-          - yum-utils
-        state: installed
-      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+    - name: Install deps
+      include: 'deps.yml'
 
-    - name: apt ppa installeren
-      apt_repository:
-        repo: ppa:wireguard/wireguard
-      when: ansible_distribution == 'Ubuntu'
-
-    - name: debian keyring
-      package:
-        name:
-          - debian-archive-keyring
-          - debian-keyring
-      when: ansible_distribution == 'Debian'
-
-    - name: Add an apt key by id from a keyserver
-      apt_key:
-        keyserver: keyserver.ubuntu.com
-        id: "{{ item }}"
-      loop:
-          - 04EE7237B7D453EC
-          - 648ACFD622F3D138
-      when: ansible_distribution == 'Debian'
-
-    - name: apt sources
-      apt_repository:
-        repo: "deb http://deb.debian.org/debian/ unstable main"
-        state: present
-      when: ansible_distribution == 'Debian'
-
+    # Otherwise the webserver doesn't work in centos/rhel
     - name: Put SELinux in permissive mode
       selinux:
         policy: targeted
         state: permissive
       when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
 
-    - name: create pihole directory
-      file:
-        path: /etc/pihole
-        state: directory
-
-    - name: Update pihole configuration
-      copy:
-        dest: /etc/pihole/setupVars.conf
-        content: |
-          WEBPASSWORD=
-          PIHOLE_INTERFACE={{ interface }}
-          IPV4_ADDRESS={{ hostvars[inventory_hostname]['ansible_%s'| format(interface)].ipv4.address }}/{{ hostvars[inventory_hostname]['ansible_%s' | format(interface)].ipv4.address }}
-          IPV6_ADDRESS=
-          QUERY_LOGGING=true
-          INSTALL_WEB_SERVER=true
-          INSTALL_WEB_INTERFACE=true
-          LIGHTTPD_ENABLED=true
-          DNSMASQ_LISTENING=local
-          PIHOLE_DNS_1=8.8.8.8
-          PIHOLE_DNS_2=8.8.4.4
+    - name: Install deps
+      include: 'pihole.yml'
 
     - name: Copy using inline content
       copy:
         content: "{{ motd }}"
         dest: /etc/motd
 
+    - name: Install wireguard
+      include: 'wireguard.yml'
 
-      # TODO ALles per OS in een block ipv losse WHEN statements
-      # user PI disablen (securen) na rpi installer
 
-    - name: Update all packages on a Debian/Ubuntu
-      apt:
-        update_cache: yes
-        upgrade: dist
-      when: ansible_distribution == 'Debian'
-
-    - name: download install script
-      get_url:
-        url: https://install.pi-hole.net
-        dest: /tmp/basic-install.sh
-        mode: u+rwx
-
-    - name: run install script
-      command: bash /tmp/basic-install.sh --unattended
-      environment:
-        PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
-      args:
-        creates: /usr/local/bin/pihole
-
-    - name: Nieuwe kernel
-      package:
-        name:
-          - kernel-devel
-          - kernel-headers
-          - kernel
-        state: latest
-      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
-
-    - name: reboot for new kernel
-      reboot:
-      # when if [ "$(sudo grubby --default-kernel | sed 's/^[^-]*-//')" != "$(uname -r)" ] ; then echo anders; else echo same; fi
-
-    - name: Add Wireguard repo
-      yum_repository:
-        name: wireguard
-        description: Copr repo for wireguard owned by jdoss
-        baseurl: https://copr-be.cloud.fedoraproject.org/results/jdoss/wireguard/epel-7-$basearch
-        enabled: yes
-        gpgkey: https://copr-be.cloud.fedoraproject.org/results/jdoss/wireguard/pubkey.gpg
-        gpgcheck: true
-      when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
-
-    - name: Wireguard + dependencies
-      package:
-        name:
-          - wireguard-dkms
-          - wireguard-tools
-          - qrencode
-        state: latest
-
-    - name: Create config dir
-      file:
-        state: directory
-        path: /etc/wireguard
-
-    - name: sysctl
-      sysctl:
-        name: "{{ item }}"
-        state: present
-        value: "1"
-        sysctl_file: /etc/sysctl.d/forwarding.conf
-        sysctl_set: yes
-        reload: yes
-      loop:
-        - net.ipv4.ip_forward
-        - net.ipv6.conf.all.forwarding
-
-    - name: Create keypairs
-      shell: umask 077 && wg genkey | tee wg-private.key | wg pubkey > wg-public.key
-      args:
-        chdir: /etc/wireguard
-        creates:
-          - /etc/wireguard/wg-private.key
-          - /etc/wireguard/wg-public.key
-
-    - name: cat privkey
-      command: cat /etc/wireguard/wg-private.key
-      register: serverprivkey
-
-    - name: cat pubkey
-      command: cat /etc/wireguard/wg-public.key
-      register: serverpubkey
-
-    - name: Build rest of config
-      copy:
-        dest: /etc/wireguard/wg0.conf
-        mode: 0600
-        content: |
-          [Interface]
-          PrivateKey = {{ serverprivkey.stdout }}
-          ListenPort = 51280
-          SaveConfig = false
-          Address = 10.0.88.1/24
-          PreUp = ip r add default via 192.168.88.1 dev {{ interface }}; iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -s 10.0.88.0/24 -o {{ interface }} -j MASQUERADE
-          PostDown = ip r del default via 192.168.88.1 dev {{ interface }}; iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -s 10.0.88.0/24 -o {{ interface }} -j MASQUERADE
-
-    - name: enable start
-      systemd:
-        state: started
-        service: wg-quick@wg0
-        enabled: true
-
+# TODO ALles per OS in een block ipv losse WHEN statements
+# TODO split-tunnel mogelijk maken
+# TODO user PI disablen (securen) na rpi installer
 # FIXME default route deleten is vast niet zo'n goed idee
+# when if [ "$(sudo grubby --default-kernel | sed 's/^[^-]*-//')" != "$(uname -r)" ] ; then echo anders; else echo same; fi

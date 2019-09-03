@@ -1,0 +1,35 @@
+- name: create pihole directory
+  file:
+    path: /etc/pihole
+    state: directory
+
+- name: Update pihole configuration
+  copy:
+    dest: /etc/pihole/setupVars.conf
+    content: |
+      WEBPASSWORD=
+      PIHOLE_INTERFACE={{ interface }}
+      IPV4_ADDRESS={{ hostvars[inventory_hostname]['ansible_%s'| format(interface)].ipv4.address }}/{{ hostvars[inventory_hostname]['ansible_%s' | format(interface)].ipv4.address }}
+      IPV6_ADDRESS=
+      QUERY_LOGGING=true
+      INSTALL_WEB_SERVER=true
+      INSTALL_WEB_INTERFACE=true
+      LIGHTTPD_ENABLED=true
+      DNSMASQ_LISTENING=local
+      PIHOLE_DNS_1=8.8.8.8
+      PIHOLE_DNS_2=8.8.4.4
+
+- name: download install script
+  get_url:
+    url: https://install.pi-hole.net
+    dest: /tmp/basic-install.sh
+    mode: u+rwx
+
+- name: run install script
+  command: bash /tmp/basic-install.sh --unattended
+  environment:
+    PATH: "/usr/local/bin:{{ ansible_env.PATH }}"
+  args:
+    creates: /usr/local/bin/pihole
+
+
