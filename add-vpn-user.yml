@@ -66,15 +66,7 @@
         allowed-ips 10.0.88.{{ number }}/32
 
     - name: save config
-      command: wg showconf {{ interface }}
-      register: conf
-
-    - name: write conf
-      copy:
-        content: |
-          {{ conf.stdout }}
-        dest: /etc/wireguard/{{ interface }}.conf
-        mode: 0600
+      command: wg-quick save {{ interface }}
 
     - name: show qrcode
       shell: qrencode -t ansiutf8 < /etc/wireguard/{{ vpnuser }}/config > /etc/wireguard/{{ vpnuser }}/qr
