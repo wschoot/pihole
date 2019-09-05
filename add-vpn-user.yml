@@ -1,18 +1,26 @@
 ---
 - hosts: all
+  gather_facts: false
   become: true
   vars:
     interface: wg0
+    vpnnet:
+      - 10.0.88.0/24
+      - 192.168.88.0/24
   vars_prompt:
     - name: vpnuser
       prompt: "VPN user?"
       private: no
 
-    - name: number #FIXME autodetect
-      prompt: "Number?"
-      private: no
-
   tasks:
+    - name: Vind het hoogste nummer + 1
+      shell: "wg | awk -F[./] '/allowed ips: 10/  $4 > max {max = $4} END { print $4 +1 }'"
+      register: highest
+
+    - name: set +1
+      set_fact:
+        number: "{{ highest.stdout }}"
+
     - name: bestaat de workdir al?
       stat:
         path: /etc/wireguard/{{ vpnuser }}
@@ -43,6 +51,21 @@
     - name: get pubkey in var
       command: cat /etc/wireguard/{{ vpnuser }}/public.key
       register: pubkey
+
+    - name: generate splittunneling client config
+      copy:
+        dest: /etc/wireguard/{{ vpnuser }}/splitconfig
+        content: |
+          [Interface]
+          PrivateKey = {{ privatekey.stdout }}
+          Address = 10.0.88.{{ number }}/24
+          DNS = 10.0.88.1,8.8.8.8
+
+          [Peer]
+          Endpoint = huis.schoot.org:53
+          PersistentKeepalive = 25
+          PublicKey = {{ serverpubkey.stdout }}
+          AllowedIPs = {{ vpnnet|join(",") }}
 
     - name: generate client config
       copy:
