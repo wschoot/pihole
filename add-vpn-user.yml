@@ -1,3 +1,5 @@
+# sshpass nodig op host
+# ansible-playbook -i localhost, add-vpn-user.yml -u pi -k -e vpnuser=ipad2
 ---
 - hosts: all
   gather_facts: false
